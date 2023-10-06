@@ -2,11 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"image"
 	"image/jpeg"
 	"image/png"
 	"os"
 	"sort"
+	"time"
 )
 
 // check handles a potential error.
@@ -15,6 +17,11 @@ func check(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8) {
+	var1 := medianFilter(startY, endY, startX, endX, data)
+	out <- var1
 }
 
 // makeMatrix makes and returns a 2D slice with the given dimensions.
@@ -114,11 +121,48 @@ func filter(filepathIn, filepathOut string, threads int) {
 
 	immutableData := makeImmutableMatrix(getPixelData(img))
 	var newPixelData [][]uint8
-	
+
 	if threads == 1 {
 		newPixelData = medianFilter(0, height, 0, width, immutableData)
 	} else {
-		panic("TODO Implement me")
+		var finals []chan [][]uint8
+		chan1 := make(chan [][]uint8)
+		chan2 := make(chan [][]uint8)
+		chan3 := make(chan [][]uint8)
+		chan4 := make(chan [][]uint8)
+		go worker(0, height, 0, 128, immutableData, chan1)
+		go worker(0, height, 128, 256, immutableData, chan2)
+		go worker(0, height, 256, 384, immutableData, chan3)
+		go worker(0, height, 384, 512, immutableData, chan4)
+		count := 0
+		for count < 4 {
+			select {
+			case one := <-chan1:
+				fmt.Println("1 received")
+				one = one
+				finals = append(finals, chan1)
+				count++
+			case two := <-chan2:
+				two = two
+				fmt.Println("two received")
+				finals = append(finals, chan2)
+				count++
+			case three := <-chan3:
+				three = three
+				fmt.Println("three received")
+				finals = append(finals, chan3)
+				count++
+			case four := <-chan4:
+				fmt.Println("four, recieved")
+				four = four
+				finals = append(finals, chan4)
+				count++
+				c5 := <-chan4
+				fmt.Println("HERE ", c5)
+			}
+			time.Sleep(1 * time.Second)
+		}
+
 	}
 
 	imout := image.NewGray(image.Rect(0, 0, width, height))
@@ -150,7 +194,7 @@ func main() {
 	flag.IntVar(
 		&threads,
 		"threads",
-		1,
+		2,
 		"Specify the number of worker threads to use.")
 
 	flag.Parse()
