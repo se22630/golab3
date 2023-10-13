@@ -8,7 +8,6 @@ import (
 	"image/png"
 	"os"
 	"sort"
-	"time"
 )
 
 // check handles a potential error.
@@ -17,11 +16,6 @@ func check(err error) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8) {
-	var1 := medianFilter(startY, endY, startX, endX, data)
-	out <- var1
 }
 
 // makeMatrix makes and returns a 2D slice with the given dimensions.
@@ -96,6 +90,12 @@ func loadImage(filepath string) image.Image {
 	return img
 }
 
+func worker(startY, endY, startX, endX int, data func(y, x int) uint8, out chan<- [][]uint8) {
+	var returned [][]uint8
+	returned = medianFilter(startY, endY, startX, endX, data)
+	out <- returned
+}
+
 // flattenImage takes a 2D slice and flattens it into a single 1D slice.
 func flattenImage(image [][]uint8) []uint8 {
 	height := len(image)
@@ -124,47 +124,21 @@ func filter(filepathIn, filepathOut string, threads int) {
 
 	if threads == 1 {
 		newPixelData = medianFilter(0, height, 0, width, immutableData)
-	} else {
-		var finals []chan [][]uint8
-		chan1 := make(chan [][]uint8)
-		chan2 := make(chan [][]uint8)
-		chan3 := make(chan [][]uint8)
-		chan4 := make(chan [][]uint8)
-		go worker(0, height, 0, 128, immutableData, chan1)
-		go worker(0, height, 128, 256, immutableData, chan2)
-		go worker(0, height, 256, 384, immutableData, chan3)
-		go worker(0, height, 384, 512, immutableData, chan4)
-		count := 0
-		for count < 4 {
-			select {
-			case one := <-chan1:
-				fmt.Println("1 received")
-				one = one
-				finals = append(finals, chan1)
-				count++
-			case two := <-chan2:
-				two = two
-				fmt.Println("two received")
-				finals = append(finals, chan2)
-				count++
-			case three := <-chan3:
-				three = three
-				fmt.Println("three received")
-				finals = append(finals, chan3)
-				count++
-			case four := <-chan4:
-				fmt.Println("four, recieved")
-				four = four
-				finals = append(finals, chan4)
-				count++
-				c5 := <-chan4
-				fmt.Println("HERE ", c5)
-			}
-			time.Sleep(1 * time.Second)
+	} else { //this is where i'm working
+		workerHeight := height / threads
+		channelslice := make([]chan [][]uint8, threads)
+		for i := range channelslice {
+			channelslice[i] = make(chan [][]uint8)
 		}
-
+		for i := 0; i < threads; i++ {
+			go worker(i*workerHeight, (i+1)*workerHeight, 0, width, immutableData, channelslice[i])
+		}
+		for i := 0; i < threads; i++ {
+			tempslice := <-channelslice[i]
+			newPixelData = append(newPixelData, tempslice...)
+		}
 	}
-
+	fmt.Println(" ") //test
 	imout := image.NewGray(image.Rect(0, 0, width, height))
 	imout.Pix = flattenImage(newPixelData)
 	ofp, _ := os.Create(filepathOut)
@@ -194,7 +168,7 @@ func main() {
 	flag.IntVar(
 		&threads,
 		"threads",
-		2,
+		1,
 		"Specify the number of worker threads to use.")
 
 	flag.Parse()
