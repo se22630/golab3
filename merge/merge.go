@@ -43,8 +43,24 @@ func mergeSort(slice []int32) {
 }
 
 // TODO: Parallel merge sort.
-func parallelMergeSort(slice []int32) {
-	mergeSort(slice)
+func parallelMergeSort(slice []int32, max int) {
+	if len(slice) > 1 {
+		if len(slice) <= max {
+			mergeSort(slice)
+		} else {
+			middle := len(slice) / 2
+			done := make(chan bool)
+
+			go func() {
+				parallelMergeSort(slice[:middle], max)
+				done <- true
+			}()
+
+			parallelMergeSort(slice[middle:], max)
+			done <- true
+			merge(slice, middle)
+		}
+	}
 }
 
 // main starts tracing and in parallel sorts a small slice.
@@ -69,5 +85,5 @@ func main() {
 		slice = append(slice, i)
 	}
 
-	parallelMergeSort(slice)
+	parallelMergeSort(slice, 0)
 }
